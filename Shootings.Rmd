@@ -1,0 +1,306 @@
+---
+title: "Week 3 Project"
+author: "P.M."
+date: "2024-04-05"
+output:
+  pdf_document: default
+  html_document: default
+editor_options: 
+  chunk_output_type: inline
+---
+
+## Step 1: Source information
+
+Welcome to the report on the NYPD Shooting incident report. This report looks at all the shootings that have happened in New York from 2006 to 2022.
+
+**Question to Answer:** What are some of the demographic trends we can see in the shootings?
+
+## Step 1: Source information
+
+The first thing we did was to find a reliable source of data of the historic Shooting data for New York and so decided to use data from a US government Data site: "<https://catalog.data.gov/dataset>", particularly in the data set titled: NYPD Shooting Incident Data (Historic).
+
+***Note: We used the [tidyverse package]{.underline} to tidy in our data***
+
+### Importing Data:
+
+We imported our data as a CSV file from this link: <https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD>
+
+```{r, tidy=TRUE, width=60}
+library(readr)
+Shooting_Data_main <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD")
+summary(Shooting_Data_main)
+
+```
+
+## Step 2: Tidying the Data:
+
+After importing the data, I read through it to see if it needs any tidying or if it's missing any information:
+
+1.  **Changing the date to a date object**:
+
+```{r}
+#installing needed libraries
+library(dplyr)
+library(lubridate)
+
+Shooting_Data_main <- Shooting_Data_main %>% mutate(OCCUR_DATE = mdy(OCCUR_DATE)) 
+```
+
+2.  **Removing columns we will not use**
+
+    We view all the columns and identified 9 columns we won't need for our analysis, so we removed columns like, Jurisdiction_code, statistical_murder_flag, latitude as seen below:
+
+    ```{r}
+    to_remove <- c("JURISDICTION_CODE","STATISTICAL_MURDER_FLAG","Latitude","X_COORD_CD","Longitude","Y_COORD_CD","Lon_Lat","LOC_CLASSFCTN_DESC","LOC_OF_OCCUR_DESC")
+
+    Shooting_Data_main <- Shooting_Data_main[,!(names(Shooting_Data_main) %in% to_remove)]
+    ```
+
+    We also filtered out columns with empty values like LOC_CLASSFCTN_DESC and LOC_OF_OCCUR_DESC.
+
+3.  Filtering out empty values such as NA and UNKOWN in the Race and age groups catergories:
+
+    **Removing NA values**:
+
+    ```{r}
+    Shooting_Data_main <- na.omit(Shooting_Data_main)
+    ```
+
+    **Removing all "UNKOWN" values**
+
+    The PERP_AGE_GROUP column had many unknown values so we filtered them out:
+
+    ```{r}
+    Shooting_Data_main <- Shooting_Data_main %>% filter(PERP_AGE_GROUP != "UNKNOWN")
+    ```
+
+    **Missing and incorrect values**
+
+    At the end this is how the data looks:
+
+    ```{r}
+    summary(Shooting_Data_main)
+    ```
+
+    For the rest of the missing values in some of the columns for example in perpetrator age groups there were some unknown values in some rows, as we go along in doing our analysis, we will check to see if there are any missing values and adjust appropriately.
+
+## Step 3: Analyzing the Data:
+
+After cleaning and importing the data we will now analyze the data, particularly looking at the demographic statistics within the data.
+
+#### 1. Looking at the Boroughs affected over the years:
+
+-   First we start by looking at the total number of shootings in the different boroughs to see the highest and lowest:
+
+    ```{r}
+    Boro_Sum <- Shooting_Data_main %>% count(BORO)
+    print(Boro_Sum)
+    ```
+
+    from this we see Brooklyn as the highest and State Island as the lowest, we then did an analysis of the number of deaths between 2006 to 2022 in the graph below:
+
+    ```{r}
+    library(ggplot2)
+    # Organising the data by Borough and by the date
+    Bronx <- Shooting_Data_main %>% filter(BORO == "BRONX")
+    Bronx_date <- Bronx %>% count(OCCUR_DATE)
+    Bronx_date <- Bronx_date %>% rename(BRONX = n)
+
+    BROOKLYN <- Shooting_Data_main %>% filter(BORO == "BROOKLYN")
+    BROOKLYN_date <- BROOKLYN %>% count(OCCUR_DATE)
+    BROOKLYN_date <- BROOKLYN_date %>% rename(BROOKLYN = n)
+
+    MANHATTAN <- Shooting_Data_main %>% filter(BORO == "MANHATTAN")
+    MANHATTAN_date <- MANHATTAN %>% count(OCCUR_DATE)
+    MANHATTAN_date <- MANHATTAN_date %>% rename(MANHATTAN = n)
+
+    QUEENS <- Shooting_Data_main %>% filter(BORO == "QUEENS")
+    QUEENS_date <- QUEENS %>% count(OCCUR_DATE)
+    QUEENS_date <- QUEENS_date %>% rename(QUEENS = n)
+
+    STATEN_ISLAND <- Shooting_Data_main %>% filter(BORO == "STATEN ISLAND")
+    STATEN_ISLAND_date <- STATEN_ISLAND %>% count(OCCUR_DATE)
+    STATEN_ISLAND_date <- STATEN_ISLAND_date %>% rename(STATEN = n)
+
+    #Merging them into one Dataframe and the number of deaths for each Borough at each date:
+    BOROS <- merge(merge(merge(Bronx_date,BROOKLYN_date, by = "OCCUR_DATE"), MANHATTAN_date, by = "OCCUR_DATE"), STATEN_ISLAND_date, by = "OCCUR_DATE")
+
+    #Plotting it on a graph
+
+    ggplot(BOROS, aes(x = OCCUR_DATE)) + geom_line(aes(y = BRONX, color="BRONX")) + geom_point(aes(y = BRONX, color="BRONX"))+ geom_line(aes(y=BROOKLYN, color="BROOKLYN"))+ geom_point(aes(y=BROOKLYN, color="BROOKLYN")) + geom_line(aes(y=MANHATTAN,color="MANHATTAN")) + geom_point(aes(y=MANHATTAN,color="MANHATTAN")) + geom_line(aes(y=STATEN,color="STATEN")) + geom_point(aes(y=STATEN,color="STATEN")) + labs(x = "Year", y = "city", title="Shootings per day over the years") + theme(legend.position = "bottom", axis.text.x = element_text(angle = 90))
+
+    ```
+
+-   From the graph of shootings per day above we see that Staten Island has been relatively constant over the years but had a high growth from around 2022. We also see Bronx has had a steady decline over the years. We see also that 2022 has had high growth for all Boroughs. Below we investigate Brooklyn a little further as it had the highest shootings across all Boroughs:
+
+    ```{r}
+    ggplot(BOROS, aes(x = OCCUR_DATE)) + geom_line(aes(y=BROOKLYN, color="BROOKLYN"))+ geom_point(aes(y=BROOKLYN, color="BROOKLYN")) + labs(x = "Year", y = "city", title="City Overview") + theme(legend.position = "bottom", axis.text.x = element_text(angle = 90))
+    ```
+
+    From above we see that Brooklyn has had a stead rise over the years. In 2022, its been unstable dropping and rising.
+
+    ##### **Additional Questions:**
+
+    1.  One question raised would be the population between cities, is the high deaths in Brooklyn a result of a higher population or higher crime rate?
+    2.  Another would be what caused the spike in 2022 and above, would it be a new government policy, or the immigration crisis, or something else?
+
+#### 2. Age Groups
+
+We also looked at what age groups are the victims and the perpetrators of the crime.
+
+We started of with the [**victims**]{.underline} as seen below in the graph:
+
+```{r}
+#Organising by age groups
+histgm <- Shooting_Data_main %>% count(VIC_AGE_GROUP)
+histgm[1,1] <- "10-22"
+histgm1 <- histgm[-7,]
+ggplot(histgm1, aes(x=VIC_AGE_GROUP,y=n)) + geom_bar(stat="identity",fill = "red",color = "black")+ labs(x="Age Group",y="Count", title = "Shootings per Age Group")
+```
+
+We also did some cleaning of the data, removing "UNKNOWN" values and editing the age group text from "**1022**" to "**10-22**".
+
+**Analysis**: From the graph above we see that the largest groups are between 18-24, and and 25-44. This makes sense in that these are the most active groups in any society.
+
+We also looked at the [**prepetrators**]{.underline} age group:
+
+We started by first cleaning the data, removing Null values and wrong values that don't fit in any age group:
+
+```{r}
+#Organising by perp age groups
+prepbar <- Shooting_Data_main %>% count(PERP_AGE_GROUP)
+print(prepbar)
+prepbar <- prepbar[-c(1,2,4,8),]
+ggplot(prepbar, aes(x=PERP_AGE_GROUP,y=n)) + geom_bar(stat="identity",fill = "red",color = "black")+ labs(x="Age Group",y="Count", title = "Shootings per Age Group")
+
+```
+
+Over here we see a larger amount between 18-24, and and 25-44 as before but this time a higher number from the 18-24 age range, which despite being the smallest in terms of years part (that is from 18 to 24 is just 6 years) has the highest number of crime.
+
+##### **Additional Questions raised**:
+
+1.  What is the population between the different age groups from the victims to the perpetrator. This might raise question as to whether the rates of crime committed at the different age groups is a result of population and not other factors such as economic status and so forth.
+2.  What was the reason for the shooting, was it a robbery related crime, a gang violence related crime, domestic or civil case. This would help in understanding what factors cause shootings the most.
+
+#### 3. Gender
+
+We also look at the gender demographics of the shooters and the victims.
+
+We first started with the [**perpetrators**]{.underline}:
+
+```{r}
+race_pie <- Shooting_Data_main %>% count(PERP_SEX)
+print(race_pie)
+```
+
+After this we clean the data to remove null values:
+
+```{r}
+#removing empty/null values
+race_pie <- race_pie[-1,]
+ggplot(race_pie,aes(x = "", y = n, fill = PERP_SEX))+ geom_bar(stat="identity",width = 1) + coord_polar("y", start = 0) + theme_void() + theme(legend.position = "right")
+```
+
+From here we can see there was a high ratio of male perpetrators (96%). We see it more in detail below in a bar graph that there were over 6000 shootings by male perpetrators and less than 500 for the rest:
+
+```{r}
+ggplot(race_pie, aes(x=PERP_SEX,y=n)) + geom_bar(stat="identity",fill = "red",color = "black")+ labs(x="Gender",y="Count", title = "Gender of Perpetrators")
+```
+
+Then looking at the [**victims**]{.underline} as shown below:
+
+```{r}
+race_pie_vic <- Shooting_Data_main %>% count(VIC_SEX)
+ggplot(race_pie_vic,aes(x = "", y = n, fill = VIC_SEX))+ geom_bar(stat="identity",width = 1) + coord_polar("y", start = 0) + theme_void() + theme(legend.position = "right")
+```
+
+From here we see similar trend of having a significantly higher number of male vitctims, however it's lesser here by by about 10% (86%) than for perpetrators. We see it more in detail below:
+
+```{r}
+ggplot(race_pie_vic, aes(x=VIC_SEX,y=n)) + geom_bar(stat="identity",fill = "red",color = "black")+ labs(x="Gender",y="Count", title = "Gender of Victims")
+```
+
+From here we see that male victims were over 6000 but female victims were just about 1000. This raises more questions:
+
+1.  What was the reason/cause of the shooting, were the high male to male shootings a result of gang violence or other causes?
+2.  What is the population distribution of males, is this the cause of the high numbers?
+
+#### 4. Predicting Model of Age Group VS Race
+
+I also looked at the relation between race and age group for perpetrators, to understand if it race was a factor that affected the distribution of shootings between age groups.
+
+To start it of, we first looked at shootings from between 2006 to 2011 (5 year period), looking at the percentages between the age groups and we used this to train our model. We then looked test the model with data from 2011 to 2016 (5 year period) to see if our model accurately represented the data.
+
+```{r}
+mod_used <- Shooting_Data_main %>% filter(year(OCCUR_DATE) <= 2011) %>% count(PERP_AGE_GROUP)
+print(mod_used)
+
+#Cleaning it to remove unwanted data:
+mod_used <- mod_used[-2,]
+
+#Getting the percentage distribution of the different age groups:
+total_count <- sum(mod_used$n)
+mod_used <- mod_used %>% mutate(percentage = n / total_count *100)
+
+#making a prediction of the data:
+preditions <- lm(percentage ~ PERP_AGE_GROUP, data=mod_used)
+
+#data we will use to test our model:
+test_mod <- Shooting_Data_main %>% filter(year(OCCUR_DATE) > 2011 & year(OCCUR_DATE) <= 2016) %>% count(PERP_AGE_GROUP)
+
+#cleaning up the data and getting percentage ratios:
+test_mod <- test_mod[-c(1,6),]
+total_count <- sum(test_mod$n)
+test_mod <- test_mod %>% mutate(percentage = n / total_count *100)
+
+#predicting the data:
+test_mod$predictions <- predict(preditions, newdata = test_mod)
+
+ggplot(test_mod, aes(x = PERP_AGE_GROUP)) + geom_line(aes(y=percentage, color="Actual"))+ geom_point(aes(y=percentage, color="Actual"))+ geom_line(aes(y=predictions, color="predictions"))+ geom_point(aes(y=predictions, color="predictions")) + labs(x = "Age Group", y = "Percentage", title="2011 - 2016") + theme(legend.position = "bottom", axis.text.x = element_text(angle = 90))
+```
+
+From below, we see that our predicted values closely imitate the actual values. now to test our theory, we looked at data from the 2 races with the highest shootings, that is Black and White Hispanic.
+
+Starting with [**Black**]{.underline}
+
+```{r}
+Black <- test_mod <- Shooting_Data_main %>% filter(year(OCCUR_DATE) > 2011 & year(OCCUR_DATE) <= 2016) %>% filter(PERP_RACE == "BLACK")%>% count(PERP_AGE_GROUP)
+
+Black <- Black[-1,]
+total_count <- sum(Black$n)
+Black <- Black %>% mutate(percentage = n / total_count *100)
+Black$predictions <- predict(preditions, newdata = Black)
+ggplot(Black, aes(x = PERP_AGE_GROUP)) + geom_line(aes(y=percentage, color="Actual"))+ geom_point(aes(y=percentage, color="Actual"))+ geom_line(aes(y=predictions, color="predictions"))+ geom_point(aes(y=predictions, color="predictions")) + labs(x = "Age Group", y = "Percentage", title="2011 - 2016") + theme(legend.position = "bottom", axis.text.x = element_text(angle = 90))
+```
+
+We can see it's following a similar pattern , however in this case our predictions are sometimes lower and sometimes higher than the actual values, but nothing significant showing a difference here.
+
+I did the same for [**White-Hispanic**]{.underline}
+
+```{r}
+White <- Shooting_Data_main %>% filter(year(OCCUR_DATE) > 2011 & year(OCCUR_DATE) <= 2016) %>% filter(PERP_RACE == "WHITE HISPANIC")%>% count(PERP_AGE_GROUP)
+White <- White[-5,]
+total_count <- sum(White$n)
+White <- White %>% mutate(percentage = n / total_count *100)
+White$predictions <- predict(preditions, newdata = White)
+
+ggplot(White, aes(x = PERP_AGE_GROUP)) + geom_line(aes(y=percentage, color="Actual"))+ geom_point(aes(y=percentage, color="Actual"))+ geom_line(aes(y=predictions, color="predictions"))+ geom_point(aes(y=predictions, color="predictions")) + labs(x = "Age Group", y = "Percentage", title="2011 - 2016") + theme(legend.position = "bottom", axis.text.x = element_text(angle = 90))
+```
+
+Here we see a similar trend where the predictions are not too far off from the actual values. This therefore concludes that race does not affect age group.
+
+#### 5. Conclusion and possible bias:
+
+In conclusion as a summary we first got our data from a US government website and after cleaning it up, we looked at 4 areas:
+
+1.  which Boroughs are affected the most and how have the murders increased over the years. We determined that Brooklyn had the highest murders and Staten Island had the lowest. We also that found the for the most part the shooting incidents had seen a significant growth around the year 2022.
+
+2.  Which age groups are affected the most both victim and perpetrator. we found that between the ages of 25-44 had the highest number of victims and 18-24 had the highest number of perpetrators
+
+3.  We also looked at the gender distribution of the shootings and found that there was a significantly high number of male perpetrators and male victims.
+
+4.  We also looked at the possibility, if there was a link between race and age group and developed a model to predict what was most likely the outcome of each race. it was concluded that race didn't affect the distribution of age group substantially.
+
+**Possible Sources of Bias**: From my own knowledge and understanding of New York and especially some of the challenges facing youths I already came into the research expecting a certain criteria and demographic of perpetrators of gun violence. However to mitigate this, I looked at the overall age groups to understand what were their numbers and let the data speak for itself and only analyzed it from the insights I was getting from the data and not what I already now.
+
+Another source of Bias is personal interest, particularly in the analysis, I was interested in just knowing one aspect, which was the race divisions of the shootings, however to mitigate this, I looked at many aspects other than just race, looked at location, gender and age group to have a balance of insights.
